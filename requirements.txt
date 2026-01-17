@@ -1,0 +1,7 @@
+# Core dependencies
+langchain-anthropic
+python-dotenv
+pandas
+yfinance
+matplotlib
+seaborn
