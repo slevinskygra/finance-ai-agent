@@ -61,13 +61,13 @@ class TransactionManager:
                 print(f"Error loading transactions: {e}")
                 # Return empty DataFrame on error
                 return pd.DataFrame(columns=[
-                    'id', 'date', 'type', 'category', 'amount', 
+                    'id', 'date', 'type', 'category', 'amount',
                     'description', 'payment_method'
                 ])
         else:
             # Create empty DataFrame with schema
             return pd.DataFrame(columns=[
-                'id', 'date', 'type', 'category', 'amount', 
+                'id', 'date', 'type', 'category', 'amount',
                 'description', 'payment_method'
             ])
     
@@ -87,13 +87,13 @@ class TransactionManager:
                 print(f"Error loading investments: {e}")
                 # Return empty DataFrame on error
                 return pd.DataFrame(columns=[
-                    'id', 'symbol', 'quantity', 'purchase_price', 
+                    'id', 'symbol', 'quantity', 'purchase_price',
                     'purchase_date', 'total_cost'
                 ])
         else:
             # Create empty DataFrame with schema
             return pd.DataFrame(columns=[
-                'id', 'symbol', 'quantity', 'purchase_price', 
+                'id', 'symbol', 'quantity', 'purchase_price',
                 'purchase_date', 'total_cost'
             ])
     
@@ -112,7 +112,7 @@ class TransactionManager:
         df.to_csv(self.data_file, index=False)
     
     def add_transaction(
-        self, 
+        self,
         transaction_type: str,
         category: str,
         amount: float,

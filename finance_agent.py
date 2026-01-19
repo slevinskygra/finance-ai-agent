@@ -11,6 +11,7 @@ load_dotenv()
 
 import os
 import yfinance as yf
+import pandas as pd
 from datetime import datetime
 from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
@@ -25,7 +26,7 @@ transaction_manager = TransactionManager()
 
 
 @tool
-def add_transaction(transaction_type: str, category: str, amount: float, 
+def add_transaction(transaction_type: str, category: str, amount: float,
                    description: str = "", date: str = None, payment_method: str = "Cash") -> str:
     """
     Add a new income or expense transaction.
@@ -224,7 +225,7 @@ def delete_transaction(transaction_id: int) -> str:
 
 
 @tool
-def add_investment(symbol: str, amount_dollars: float = None, number_of_shares: float = None, 
+def add_investment(symbol: str, amount_dollars: float = None, number_of_shares: float = None,
                    price_per_share: float = None, purchase_date: str = None) -> str:
     """
     Add a stock investment to the portfolio. 
@@ -240,34 +241,135 @@ def add_investment(symbol: str, amount_dollars: float = None, number_of_shares: 
     Two ways to use this:
     1. DOLLAR AMOUNT (recommended): "I invested $2000 in Apple"
        - Use amount_dollars=2000
-       - Fetches current stock price
+       - Fetches current/historical stock price based on date
        - Calculates shares automatically
        
     2. SHARE COUNT: "I bought 10 shares at $150"
        - Use number_of_shares=10, price_per_share=150
     
+    PRICE DATA NOTES:
+    - Uses DAILY CLOSING PRICES only (not intraday prices)
+    - Time of day (10am, 2pm, etc.) is ignored
+    - For dates within the last 3-5 days, historical data may not be available yet
+    - In such cases, tool will fall back to current price with a warning
+    - For accurate prices from very recent dates, provide price_per_share manually
+    
     Args:
         symbol: Stock ticker symbol (e.g., AAPL, GOOGL, TSLA, JPM)
         amount_dollars: Total dollar amount invested (e.g., 2000 for $2000)
         number_of_shares: Number of shares purchased (only if not using amount_dollars)
-        price_per_share: Price per share in dollars (optional, will fetch current if not provided)
+        price_per_share: Price per share in dollars (optional, will fetch based on purchase_date)
         purchase_date: Date of purchase in YYYY-MM-DD format (defaults to today)
+                      NOTE: Only the date matters, time of day is not used
     
     Returns:
         Success message with investment details
     """
     try:
+        # Log the inputs for debugging
+        debug_info = f"add_investment called with: symbol={symbol}, amount_dollars={amount_dollars}, number_of_shares={number_of_shares}, price_per_share={price_per_share}, purchase_date={purchase_date}"
+        print(f"[DEBUG] {debug_info}")
+        
         symbol = symbol.upper().strip()
         
-        # If price_per_share not provided, fetch current price
+        # If price_per_share not provided, fetch price based on date
         if price_per_share is None:
             import yfinance as yf
+            import pandas as pd
+            from datetime import datetime, timedelta
+            
             stock = yf.Ticker(symbol)
-            info = stock.info
-            price_per_share = info.get('currentPrice') or info.get('regularMarketPrice')
+            
+            # Determine which date to use for price lookup
+            if purchase_date:
+                # Parse the purchase date - try multiple formats
+                target_date = None
+                date_formats = [
+                    '%Y-%m-%d',      # 2024-01-16
+                    '%Y/%m/%d',      # 2024/01/16
+                    '%m/%d/%Y',      # 01/16/2024
+                    '%m-%d-%Y',      # 01-16-2024
+                    '%d/%m/%Y',      # 16/01/2024
+                    '%d-%m-%Y',      # 16-01-2024
+                ]
+                
+                for fmt in date_formats:
+                    try:
+                        target_date = datetime.strptime(purchase_date, fmt)
+                        break
+                    except ValueError:
+                        continue
+                
+                if target_date is None:
+                    return f"Error: Could not parse date '{purchase_date}'. Please use YYYY-MM-DD format (e.g., 2024-01-16)"
+                
+                # Check if date is in the future
+                if target_date > datetime.now():
+                    return f"Error: Purchase date cannot be in the future"
+                
+                # Fetch historical data for the specific date
+                # Add a buffer to handle weekends/holidays
+                start_date = (target_date - timedelta(days=7)).strftime('%Y-%m-%d')
+                end_date = (target_date + timedelta(days=1)).strftime('%Y-%m-%d')
+                
+                try:
+                    hist = stock.history(start=start_date, end=end_date)
+                except Exception as e:
+                    return f"Error: Failed to fetch historical data for {symbol}: {str(e)}\nTry providing the price manually or use current price."
+                
+                if hist.empty:
+                    # Check if it's a very recent date (within last 3 days)
+                    days_ago = (datetime.now() - target_date).days
+                    if days_ago <= 3:
+                        # For very recent dates, yfinance might not have data yet
+                        # Fall back to current price with a warning
+                        info = stock.info
+                        price_per_share = info.get('currentPrice') or info.get('regularMarketPrice')
+                        if price_per_share:
+                            date_note = f"\nNote: Historical data not yet available for {purchase_date} (only {days_ago} days ago). Using current price instead."
+                        else:
+                            return f"Error: No historical or current price data available for {symbol}. Please provide price_per_share manually."
+                    else:
+                        return f"Error: No historical data found for {symbol} around {purchase_date}. Try a different date or provide price_per_share manually."
+                else:
+                    # Find the closest trading day to the purchase date
+                    hist_dates = hist.index.normalize()
+                    
+                    # Make target_normalized timezone-aware to match hist_dates
+                    # yfinance returns timezone-aware datetimes (typically America/New_York)
+                    target_normalized = pd.Timestamp(target_date).normalize()
+                    
+                    # If hist_dates is timezone-aware, make target_normalized match
+                    if hist_dates.tz is not None:
+                        target_normalized = target_normalized.tz_localize(hist_dates.tz)
+                    
+                    # Get the closest date (on or before the target)
+                    valid_dates = hist_dates[hist_dates <= target_normalized]
+                    if len(valid_dates) == 0:
+                        # If no date on or before, get the first available date after
+                        closest_date = hist_dates[0]
+                    else:
+                        closest_date = valid_dates[-1]
+                    
+                    # Get the close price for that date
+                    price_per_share = hist.loc[closest_date, 'Close']
+                    
+                    # Inform about the actual date used if different
+                    actual_date_str = closest_date.strftime('%Y-%m-%d')
+                    if actual_date_str != purchase_date:
+                        date_note = f"\nNote: Using closing price from {actual_date_str} (closest trading day)"
+                    else:
+                        date_note = f"\nNote: Using closing price from {purchase_date} (4:00 PM ET)"
+            else:
+                # No date provided, use current price
+                info = stock.info
+                price_per_share = info.get('currentPrice') or info.get('regularMarketPrice')
+                date_note = ""
             
             if not price_per_share:
-                return f"Error: Could not fetch current price for {symbol}. Please provide price_per_share manually."
+                return f"Error: Could not fetch price for {symbol}. Please provide price_per_share manually."
+        else:
+            date_note = ""
         
         # Calculate quantity based on what's provided
         if amount_dollars is not None:
@@ -289,10 +391,18 @@ def add_investment(symbol: str, amount_dollars: float = None, number_of_shares: 
             purchase_date=purchase_date
         )
         
+        # Append date note if applicable
+        if date_note:
+            result += date_note
+        
         return result
         
     except Exception as e:
-        return f"Error adding investment: {str(e)}"
+        import traceback
+        error_details = traceback.format_exc()
+        error_msg = f"Error adding investment: {str(e)}\n\nDebug details:\n{error_details}"
+        print(f"[ERROR] {error_msg}")
+        return error_msg
 
 
 @tool
@@ -447,6 +557,21 @@ When a user asks about their data:
 - Use get_portfolio_value to see investments
 - Use get_net_worth to see complete financial picture
 - Use get_financial_summary for income/expense totals
+
+DATE HANDLING:
+When the user mentions dates in natural language (like "on the 12 of january", "january 12th", "12/1/2026"), you MUST convert them to YYYY-MM-DD format before calling tools.
+
+IMPORTANT: Ignore any time-of-day information (like "at 10am", "at 2pm"). The tools only use DAILY closing prices, not intraday prices.
+
+Examples:
+- "on the 12 of january at 10am" → "2026-01-12" (ignore the "at 10am" part)
+- "january 12, 2024" → "2024-01-12"
+- "12/1/2026" → "2026-01-12"
+- "1/12/26 at 2:30pm" → "2026-01-12" (ignore the time)
+
+Always use the current year (2026) if the user doesn't specify a year.
+
+CRITICAL: When a tool returns an error, you MUST share that exact error message with the user so they understand what went wrong. Do not hide errors or try alternative approaches without first explaining the error to the user.
 
 The data is ALWAYS there - you just need to use the right tool to access it.""")
     
