@@ -236,4 +236,3 @@ Uses Claude's native tool calling with langchain-core 1.2.7:
 - Live stock prices via yfinance API
 - Beautiful visualizations with seaborn and matplotlib
 
-This is the modern, recommended approach for building agents!
