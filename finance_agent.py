@@ -667,6 +667,167 @@ def plot_portfolio_performance(symbol: str = None, output_file: str = "portfolio
         return f"Error creating plot: {str(e)}\n\nDetails:\n{error_details}"
 
 
+@tool
+def plot_portfolio_performance_percent(symbol: str = None, output_file: str = "portfolio_performance_percent.png") -> str:
+    """
+    Create a visualization showing investment performance as percentage gains/losses over time.
+    
+    This shows how much each investment has gained or lost (in %) from its purchase price,
+    making it easy to compare relative performance across different investments.
+    
+    Unlike plot_portfolio_performance (which shows dollar values), this shows:
+    - All investments start at 0% (purchase date)
+    - Positive % = profit, Negative % = loss
+    - Easy comparison between stocks of different sizes
+    
+    Args:
+        symbol: Specific stock symbol to plot (e.g., "JPM", "AAPL"). 
+                If None, plots all investments in portfolio.
+        output_file: Name for the output image file (default: portfolio_performance_percent.png)
+    
+    Returns:
+        Success message with file path, or error if no investments found
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from datetime import datetime, timedelta
+        import yfinance as yf
+        
+        # Get investments
+        investments = transaction_manager.get_investments()
+        
+        if len(investments) == 0:
+            return "No investments found in portfolio. Add some investments first!"
+        
+        # Filter by symbol if specified
+        if symbol:
+            symbol = symbol.upper().strip()
+            investments = investments[investments['symbol'] == symbol]
+            if len(investments) == 0:
+                return f"No investments found for {symbol}"
+        
+        # Set up the plot style
+        sns.set_style("darkgrid")
+        plt.figure(figsize=(14, 8))
+        
+        # Track if we successfully plotted anything
+        plotted_any = False
+        
+        # For each unique symbol
+        symbols = investments['symbol'].unique()
+        
+        for sym in symbols:
+            sym_investments = investments[investments['symbol'] == sym]
+            
+            # Get earliest purchase date for this symbol
+            earliest_date = sym_investments['purchase_date'].min()
+            
+            # Get total shares owned and average purchase price
+            total_shares = sym_investments['quantity'].sum()
+            total_cost = sym_investments['total_cost'].sum()
+            avg_purchase_price = total_cost / total_shares
+            
+            # Fetch historical data from earliest purchase to now
+            try:
+                stock = yf.Ticker(sym)
+                
+                # Get data from purchase date to today
+                hist = stock.history(start=earliest_date, end=datetime.now() + timedelta(days=1))
+                
+                if hist.empty:
+                    print(f"Warning: No historical data for {sym}, skipping")
+                    continue
+                
+                # Calculate percentage gain/loss from purchase price
+                # Formula: ((Current Price - Purchase Price) / Purchase Price) * 100
+                percent_change = ((hist['Close'] - avg_purchase_price) / avg_purchase_price) * 100
+                
+                # Plot this investment
+                plt.plot(percent_change.index, percent_change.values,
+                        label=f'{sym} (avg buy: ${avg_purchase_price:.2f})',
+                        linewidth=2.5, marker='o', markersize=3, alpha=0.8)
+                
+                plotted_any = True
+                
+            except Exception as e:
+                print(f"Warning: Error fetching data for {sym}: {e}")
+                continue
+        
+        if not plotted_any:
+            return "Could not fetch historical data for any investments. Try again later."
+        
+        # Add a horizontal line at 0% (break-even point)
+        plt.axhline(y=0, color='red', linestyle='--', linewidth=2,
+                   alpha=0.6, label='Break-even (0%)')
+        
+        # Formatting
+        plt.xlabel('Date', fontsize=12, fontweight='bold')
+        plt.ylabel('Gain/Loss (%)', fontsize=12, fontweight='bold')
+        
+        if symbol:
+            plt.title(f'Investment Performance: {symbol}\nPercentage Gains/Losses from Purchase Price',
+                     fontsize=14, fontweight='bold', pad=20)
+        else:
+            plt.title('Portfolio Performance: Relative Gains/Losses\nAll Investments Compared (%)',
+                     fontsize=14, fontweight='bold', pad=20)
+        
+        plt.legend(loc='best', fontsize=10, framealpha=0.9)
+        plt.grid(True, alpha=0.3)
+        
+        # Add percentage formatting to y-axis
+        ax = plt.gca()
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.1f}%'))
+        
+        plt.tight_layout()
+        
+        # Save the plot
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        # Generate summary
+        result = f"✓ Portfolio percentage performance chart created: {output_file}\n\n"
+        result += "Summary (Current Performance vs. Purchase Price):\n"
+        
+        for sym in symbols:
+            sym_investments = investments[investments['symbol'] == sym]
+            total_shares = sym_investments['quantity'].sum()
+            total_cost = sym_investments['total_cost'].sum()
+            avg_purchase_price = total_cost / total_shares
+            
+            # Get current price
+            try:
+                stock = yf.Ticker(sym)
+                info = stock.info
+                current_price = info.get('currentPrice') or info.get('regularMarketPrice')
+                
+                # Calculate percentage change
+                pct_change = ((current_price - avg_purchase_price) / avg_purchase_price) * 100
+                
+                result += f"\n{sym}:\n"
+                result += f"  Purchase Date: {sym_investments['purchase_date'].min().strftime('%Y-%m-%d')}\n"
+                result += f"  Avg Purchase Price: ${avg_purchase_price:.2f}\n"
+                result += f"  Current Price: ${current_price:.2f}\n"
+                
+                if pct_change >= 0:
+                    result += f"  Performance: +{pct_change:.2f}% ✓\n"
+                else:
+                    result += f"  Performance: {pct_change:.2f}% ⚠\n"
+            except:
+                pass
+        
+        result += "\n💡 Tip: The 0% line shows break-even. Above = profit, below = loss."
+        
+        return result
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return f"Error creating percentage plot: {str(e)}\n\nDetails:\n{error_details}"
+
+
 def create_finance_agent():
     """Create the AI agent with tool calling."""
     
@@ -690,7 +851,8 @@ def create_finance_agent():
         get_portfolio_value,
         get_net_worth,
         delete_investment,
-        plot_portfolio_performance
+        plot_portfolio_performance,
+        plot_portfolio_performance_percent
     ]
     
     llm_with_tools = llm.bind_tools(tools)
@@ -705,7 +867,8 @@ When a user asks about their data:
 - Use get_portfolio_value to see investments
 - Use get_net_worth to see complete financial picture
 - Use get_financial_summary for income/expense totals
-- Use plot_portfolio_performance to create visualizations of investment performance over time
+- Use plot_portfolio_performance to create charts showing dollar value over time
+- Use plot_portfolio_performance_percent to create charts showing percentage gains/losses (better for comparing investments)
 
 DATE HANDLING:
 When the user mentions dates in natural language (like "on the 12 of january", "january 12th", "12/1/2026"), you MUST convert them to YYYY-MM-DD format before calling tools.
@@ -764,7 +927,8 @@ def main():
     print("  - Add an expense of $45 for groceries")
     print("  - What's my spending breakdown?")
     print("  - Plot my portfolio performance")
-    print("  - Show me a chart of my JPM investment over time")
+    print("  - Show me percentage gains for all investments")
+    print("  - Compare my investments using percentage returns")
     print("\nType 'quit' or 'exit' to stop.\n")
     
     # Create the agent

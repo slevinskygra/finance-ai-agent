@@ -12,9 +12,13 @@ An intelligent finance assistant powered by Claude that understands natural lang
 
 ### 📈 Investment Portfolio
 - **Track stock investments** with purchase price and date
+- **Automatic historical price lookup** - specify a date and get the actual price from that day
 - **Live portfolio valuation** using real-time stock prices
 - **Calculate gains/losses** since purchase
 - **Net worth calculation** including cash and investments
+- **📊 Visualize performance** - Two chart types:
+  - **Dollar charts**: See absolute portfolio value over time
+  - **Percentage charts**: Compare relative returns across investments
 
 ### 🤖 AI-Powered
 - Natural language interface
@@ -56,6 +60,25 @@ python finance_agent.py
 ### Investment Tracking
 
 ```
+You: I invested $1000 in Apple stock on January 16, 2024
+
+Agent: [Fetches historical price for January 16, 2024 and uses add_investment tool]
+✓ Investment added successfully!
+Symbol: AAPL
+Quantity: 5.41 shares
+Purchase Price: $184.86 per share (historical price from Jan 16, 2024)
+Total Cost: $1,000.00
+
+You: On 16 of January, I bought $500 worth of Nike actions
+
+Agent: [Fetches historical Nike price for January 16 and calculates quantity]
+✓ Investment added successfully!
+Symbol: NKE
+Quantity: 4.87 shares
+Purchase Price: $102.61 per share
+Total Cost: $500.00
+Note: Using price from 2024-01-16 (closest trading day)
+
 You: I invested $1000 in Apple stock, I bought at $150 per share
 
 Agent: [Calculates quantity and uses add_investment tool]
@@ -129,17 +152,71 @@ Change: +$5.23 (+2.24%)
 ...
 ```
 
+### Portfolio Visualization
+
+#### Dollar Value Chart
+```
+You: Plot my portfolio performance
+
+Agent: [Uses plot_portfolio_performance tool]
+✓ Portfolio performance chart created: portfolio_performance.png
+
+Summary:
+
+JPM:
+  Purchase Date: 2026-01-11
+  Total Cost: $1,000.00
+  Current Value: $1,045.23
+  Gain: $45.23 (+4.52%) ✓
+
+[Chart shows line graph of portfolio dollar value from purchase date to now]
+```
+
+#### Percentage Returns Chart
+```
+You: Show me percentage returns for all my investments
+
+Agent: [Uses plot_portfolio_performance_percent tool]
+✓ Portfolio percentage performance chart created: portfolio_performance_percent.png
+
+Summary (Current Performance vs. Purchase Price):
+
+JPM:
+  Avg Purchase Price: $245.10
+  Current Price: $256.35
+  Performance: +4.59% ✓
+
+AAPL:
+  Avg Purchase Price: $195.50
+  Current Price: $215.20
+  Performance: +10.08% ✓
+
+💡 Tip: The 0% line shows break-even. Above = profit, below = loss.
+
+[Chart shows percentage gains/losses - easy to compare relative performance!]
+```
+
+**Two views, complete picture:**
+- **Dollar chart**: Shows absolute wealth and portfolio value
+- **Percentage chart**: Shows relative performance and investment skill
+
 ## How It Works
 
 ### Investment Tracking
 1. When you add an investment, it records:
    - Stock symbol
    - Number of shares
-   - Purchase price per share
+   - Purchase price per share (fetched automatically based on date)
    - Purchase date
    - Total cost
 
-2. When you ask about your worth:
+2. **Historical Price Fetching**:
+   - If you specify a purchase date (e.g., "on January 16"), the agent fetches the actual stock price from that date
+   - Uses yfinance historical data to get the closing price on the specified date
+   - If the date falls on a weekend/holiday, it uses the closest prior trading day
+   - If no date is specified, uses the current market price
+
+3. When you ask about your worth:
    - Fetches current stock prices via yfinance
    - Calculates current value = shares × current price
    - Shows gain/loss = current value - purchase cost
@@ -157,5 +234,6 @@ Uses Claude's native tool calling with langchain-core 1.2.7:
 - `bind_tools()` to give Claude access to tools
 - Claude decides which tools to use based on your query
 - Live stock prices via yfinance API
+- Beautiful visualizations with seaborn and matplotlib
 
 This is the modern, recommended approach for building agents!
