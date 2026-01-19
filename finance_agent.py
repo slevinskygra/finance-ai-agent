@@ -828,6 +828,217 @@ def plot_portfolio_performance_percent(symbol: str = None, output_file: str = "p
         return f"Error creating percentage plot: {str(e)}\n\nDetails:\n{error_details}"
 
 
+@tool
+def get_trading_signals(symbol: str) -> str:
+    """
+    Analyze stock using technical indicators and provide buy/sell signals.
+    
+    This tool performs technical analysis using:
+    - Moving Averages (50-day and 200-day)
+    - RSI (Relative Strength Index)
+    - MACD (Moving Average Convergence Divergence)
+    - Volume analysis
+    
+    Provides clear buy/hold/sell recommendations based on multiple indicators.
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., "AAPL", "JPM", "TSLA")
+    
+    Returns:
+        Comprehensive technical analysis with trading signals and recommendations
+    """
+    try:
+        symbol = symbol.upper().strip()
+        
+        # Fetch historical data (1 year for calculations)
+        stock = yf.Ticker(symbol)
+        hist = stock.history(period="1y")
+        
+        if hist.empty:
+            return f"Error: No data available for {symbol}. Check if the symbol is correct."
+        
+        # Get current info
+        info = stock.info
+        company_name = info.get('longName', symbol)
+        current_price = hist['Close'].iloc[-1]
+        
+        # Calculate Moving Averages
+        hist['SMA50'] = hist['Close'].rolling(window=50).mean()
+        hist['SMA200'] = hist['Close'].rolling(window=200).mean()
+        
+        current_sma50 = hist['SMA50'].iloc[-1]
+        current_sma200 = hist['SMA200'].iloc[-1]
+        
+        # Check for Golden Cross or Death Cross
+        if len(hist) >= 2:
+            prev_sma50 = hist['SMA50'].iloc[-2]
+            prev_sma200 = hist['SMA200'].iloc[-2]
+            
+            if prev_sma50 <= prev_sma200 and current_sma50 > current_sma200:
+                ma_signal = "🟢 GOLDEN CROSS - Strong Buy Signal!"
+                ma_strength = "STRONG BUY"
+            elif prev_sma50 >= prev_sma200 and current_sma50 < current_sma200:
+                ma_signal = "🔴 DEATH CROSS - Strong Sell Signal!"
+                ma_strength = "STRONG SELL"
+            elif current_sma50 > current_sma200:
+                ma_signal = "🟢 Bullish Trend - 50-day MA above 200-day MA"
+                ma_strength = "BUY"
+            else:
+                ma_signal = "🔴 Bearish Trend - 50-day MA below 200-day MA"
+                ma_strength = "SELL"
+        else:
+            ma_signal = "⚪ Insufficient data for moving average crossover"
+            ma_strength = "HOLD"
+        
+        # Calculate RSI (Relative Strength Index)
+        delta = hist['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        current_rsi = rsi.iloc[-1]
+        
+        if current_rsi > 70:
+            rsi_signal = "🔴 Overbought (RSI > 70) - Potential Sell"
+            rsi_strength = "SELL"
+        elif current_rsi < 30:
+            rsi_signal = "🟢 Oversold (RSI < 30) - Potential Buy"
+            rsi_strength = "BUY"
+        elif current_rsi > 60:
+            rsi_signal = "⚠️ Approaching Overbought - Caution"
+            rsi_strength = "HOLD"
+        elif current_rsi < 40:
+            rsi_signal = "🟡 Approaching Oversold - Watch for Entry"
+            rsi_strength = "HOLD"
+        else:
+            rsi_signal = "⚪ Neutral - No strong signal"
+            rsi_strength = "HOLD"
+        
+        # Calculate MACD (Moving Average Convergence Divergence)
+        exp1 = hist['Close'].ewm(span=12, adjust=False).mean()
+        exp2 = hist['Close'].ewm(span=26, adjust=False).mean()
+        macd = exp1 - exp2
+        signal_line = macd.ewm(span=9, adjust=False).mean()
+        
+        current_macd = macd.iloc[-1]
+        current_signal = signal_line.iloc[-1]
+        prev_macd = macd.iloc[-2]
+        prev_signal = signal_line.iloc[-2]
+        
+        if prev_macd <= prev_signal and current_macd > current_signal:
+            macd_signal = "🟢 MACD Bullish Crossover - Buy Signal"
+            macd_strength = "BUY"
+        elif prev_macd >= prev_signal and current_macd < current_signal:
+            macd_signal = "🔴 MACD Bearish Crossover - Sell Signal"
+            macd_strength = "SELL"
+        elif current_macd > current_signal:
+            macd_signal = "🟢 MACD Above Signal - Bullish"
+            macd_strength = "BUY"
+        else:
+            macd_signal = "🔴 MACD Below Signal - Bearish"
+            macd_strength = "SELL"
+        
+        # Volume Analysis
+        avg_volume = hist['Volume'].rolling(window=20).mean().iloc[-1]
+        current_volume = hist['Volume'].iloc[-1]
+        volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
+        
+        if volume_ratio > 1.5:
+            volume_signal = f"🔥 High Volume ({volume_ratio:.1f}x average) - Strong Interest"
+        elif volume_ratio > 1.2:
+            volume_signal = f"📈 Above Average Volume ({volume_ratio:.1f}x) - Increased Interest"
+        elif volume_ratio < 0.5:
+            volume_signal = f"📉 Low Volume ({volume_ratio:.1f}x average) - Weak Interest"
+        else:
+            volume_signal = f"⚪ Normal Volume ({volume_ratio:.1f}x average)"
+        
+        # Overall Signal Calculation
+        signal_votes = {
+            "BUY": 0,
+            "SELL": 0,
+            "HOLD": 0,
+            "STRONG BUY": 0,
+            "STRONG SELL": 0
+        }
+        
+        signal_votes[ma_strength] += 2  # Moving averages get double weight
+        signal_votes[rsi_strength] += 1
+        signal_votes[macd_strength] += 1
+        
+        # Determine overall recommendation
+        if signal_votes["STRONG BUY"] > 0 or signal_votes["BUY"] >= 3:
+            overall = "🟢 STRONG BUY"
+            recommendation = "Consider buying or adding to position"
+        elif signal_votes["BUY"] > signal_votes["SELL"]:
+            overall = "🟢 BUY"
+            recommendation = "Positive signals, good entry point"
+        elif signal_votes["STRONG SELL"] > 0 or signal_votes["SELL"] >= 3:
+            overall = "🔴 STRONG SELL"
+            recommendation = "Consider selling or avoiding"
+        elif signal_votes["SELL"] > signal_votes["BUY"]:
+            overall = "🔴 SELL"
+            recommendation = "Negative signals, consider exiting"
+        else:
+            overall = "⚪ HOLD"
+            recommendation = "Mixed signals, maintain current position"
+        
+        # Build comprehensive result
+        result = f"""
+═══════════════════════════════════════════════════════════
+Technical Analysis: {company_name} ({symbol})
+═══════════════════════════════════════════════════════════
+
+📊 Current Status:
+   Price: ${current_price:.2f}
+   Volume: {current_volume:,.0f} shares ({volume_signal})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 Moving Averages:
+   50-day SMA:  ${current_sma50:.2f}
+   200-day SMA: ${current_sma200:.2f}
+   
+   Signal: {ma_signal}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💪 RSI (Relative Strength):
+   Current RSI: {current_rsi:.2f}
+   
+   Signal: {rsi_signal}
+   
+   Note: RSI < 30 = Oversold (buy opportunity)
+         RSI > 70 = Overbought (sell signal)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ MACD (Momentum):
+   MACD: {current_macd:.2f}
+   Signal Line: {current_signal:.2f}
+   
+   Signal: {macd_signal}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 OVERALL RECOMMENDATION: {overall}
+
+   {recommendation}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  Disclaimer: This is technical analysis only. Not financial advice.
+    Always do your own research and consider your risk tolerance.
+═══════════════════════════════════════════════════════════
+"""
+        
+        return result
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return f"Error analyzing {symbol}: {str(e)}\n\nDetails:\n{error_details}"
+
+
 def create_finance_agent():
     """Create the AI agent with tool calling."""
     
@@ -852,7 +1063,8 @@ def create_finance_agent():
         get_net_worth,
         delete_investment,
         plot_portfolio_performance,
-        plot_portfolio_performance_percent
+        plot_portfolio_performance_percent,
+        get_trading_signals
     ]
     
     llm_with_tools = llm.bind_tools(tools)
@@ -869,6 +1081,7 @@ When a user asks about their data:
 - Use get_financial_summary for income/expense totals
 - Use plot_portfolio_performance to create charts showing dollar value over time
 - Use plot_portfolio_performance_percent to create charts showing percentage gains/losses (better for comparing investments)
+- Use get_trading_signals to analyze stocks with technical indicators (moving averages, RSI, MACD) and provide buy/sell recommendations
 
 DATE HANDLING:
 When the user mentions dates in natural language (like "on the 12 of january", "january 12th", "12/1/2026"), you MUST convert them to YYYY-MM-DD format before calling tools.
@@ -920,6 +1133,7 @@ def main():
     print("  • View financial summaries")
     print("  • Get stock quotes")
     print("  • Visualize portfolio performance over time")
+    print("  • Get buy/sell trading signals with technical analysis")
     print("\nJust chat naturally! Examples:")
     print("  - I invested $1000 in Apple at $150 per share")
     print("  - How much am I worth?")
@@ -928,7 +1142,8 @@ def main():
     print("  - What's my spending breakdown?")
     print("  - Plot my portfolio performance")
     print("  - Show me percentage gains for all investments")
-    print("  - Compare my investments using percentage returns")
+    print("  - Should I buy Tesla? (gets trading signals)")
+    print("  - Analyze JPM and give me trading recommendations")
     print("\nType 'quit' or 'exit' to stop.\n")
     
     # Create the agent

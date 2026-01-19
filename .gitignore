@@ -4,3 +4,4 @@ __pycache__/
 transactions.csv
 investments.csv
 *.log
+test_trading_signals.py
