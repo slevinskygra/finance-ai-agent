@@ -520,6 +520,153 @@ def delete_investment(symbol: str) -> str:
         return f"Error deleting investment: {str(e)}"
 
 
+@tool
+def plot_portfolio_performance(symbol: str = None, output_file: str = "portfolio_performance.png") -> str:
+    """
+    Create a visualization showing how investments have performed over time.
+    
+    For each company, plots the value from purchase date to current date,
+    showing growth or loss over time. Uses actual historical stock prices.
+    
+    Args:
+        symbol: Specific stock symbol to plot (e.g., "JPM", "AAPL"). 
+                If None, plots all investments in portfolio.
+        output_file: Name for the output image file (default: portfolio_performance.png)
+    
+    Returns:
+        Success message with file path, or error if no investments found
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from datetime import datetime, timedelta
+        import yfinance as yf
+        
+        # Get investments
+        investments = transaction_manager.get_investments()
+        
+        if len(investments) == 0:
+            return "No investments found in portfolio. Add some investments first!"
+        
+        # Filter by symbol if specified
+        if symbol:
+            symbol = symbol.upper().strip()
+            investments = investments[investments['symbol'] == symbol]
+            if len(investments) == 0:
+                return f"No investments found for {symbol}"
+        
+        # Set up the plot style
+        sns.set_style("darkgrid")
+        plt.figure(figsize=(14, 8))
+        
+        # Track if we successfully plotted anything
+        plotted_any = False
+        
+        # For each unique symbol
+        symbols = investments['symbol'].unique()
+        
+        for sym in symbols:
+            sym_investments = investments[investments['symbol'] == sym]
+            
+            # Get earliest purchase date for this symbol
+            earliest_date = sym_investments['purchase_date'].min()
+            
+            # Get total shares owned
+            total_shares = sym_investments['quantity'].sum()
+            total_cost = sym_investments['total_cost'].sum()
+            avg_purchase_price = total_cost / total_shares
+            
+            # Fetch historical data from earliest purchase to now
+            try:
+                stock = yf.Ticker(sym)
+                
+                # Get data from purchase date to today
+                hist = stock.history(start=earliest_date, end=datetime.now() + timedelta(days=1))
+                
+                if hist.empty:
+                    print(f"Warning: No historical data for {sym}, skipping")
+                    continue
+                
+                # Calculate portfolio value over time for this symbol
+                portfolio_values = hist['Close'] * total_shares
+                
+                # Plot this investment
+                plt.plot(portfolio_values.index, portfolio_values.values,
+                        label=f'{sym} ({total_shares:.2f} shares)',
+                        linewidth=2, marker='o', markersize=3, alpha=0.8)
+                
+                # Add a horizontal line at the cost basis
+                plt.axhline(y=total_cost, color='gray', linestyle='--',
+                           alpha=0.3, linewidth=1)
+                
+                plotted_any = True
+                
+            except Exception as e:
+                print(f"Warning: Error fetching data for {sym}: {e}")
+                continue
+        
+        if not plotted_any:
+            return "Could not fetch historical data for any investments. Try again later."
+        
+        # Formatting
+        plt.xlabel('Date', fontsize=12, fontweight='bold')
+        plt.ylabel('Portfolio Value ($)', fontsize=12, fontweight='bold')
+        
+        if symbol:
+            plt.title(f'Investment Performance: {symbol}\nFrom Purchase Date to Present',
+                     fontsize=14, fontweight='bold', pad=20)
+        else:
+            plt.title('Portfolio Performance Over Time\nAll Investments',
+                     fontsize=14, fontweight='bold', pad=20)
+        
+        plt.legend(loc='best', fontsize=10, framealpha=0.9)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        # Save the plot
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        # Generate summary
+        result = f"✓ Portfolio performance chart created: {output_file}\n\n"
+        result += "Summary:\n"
+        
+        for sym in symbols:
+            sym_investments = investments[investments['symbol'] == sym]
+            total_shares = sym_investments['quantity'].sum()
+            total_cost = sym_investments['total_cost'].sum()
+            
+            # Get current price
+            try:
+                stock = yf.Ticker(sym)
+                info = stock.info
+                current_price = info.get('currentPrice') or info.get('regularMarketPrice')
+                current_value = total_shares * current_price
+                gain_loss = current_value - total_cost
+                gain_loss_pct = (gain_loss / total_cost * 100) if total_cost > 0 else 0
+                
+                result += f"\n{sym}:\n"
+                result += f"  Purchase Date: {sym_investments['purchase_date'].min().strftime('%Y-%m-%d')}\n"
+                result += f"  Total Cost: ${total_cost:,.2f}\n"
+                result += f"  Current Value: ${current_value:,.2f}\n"
+                
+                if gain_loss >= 0:
+                    result += f"  Gain: ${gain_loss:,.2f} (+{gain_loss_pct:.2f}%) ✓\n"
+                else:
+                    result += f"  Loss: ${abs(gain_loss):,.2f} ({gain_loss_pct:.2f}%) ⚠\n"
+            except:
+                pass
+        
+        return result
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return f"Error creating plot: {str(e)}\n\nDetails:\n{error_details}"
+
+
 def create_finance_agent():
     """Create the AI agent with tool calling."""
     
@@ -542,7 +689,8 @@ def create_finance_agent():
         add_investment,
         get_portfolio_value,
         get_net_worth,
-        delete_investment
+        delete_investment,
+        plot_portfolio_performance
     ]
     
     llm_with_tools = llm.bind_tools(tools)
@@ -557,6 +705,7 @@ When a user asks about their data:
 - Use get_portfolio_value to see investments
 - Use get_net_worth to see complete financial picture
 - Use get_financial_summary for income/expense totals
+- Use plot_portfolio_performance to create visualizations of investment performance over time
 
 DATE HANDLING:
 When the user mentions dates in natural language (like "on the 12 of january", "january 12th", "12/1/2026"), you MUST convert them to YYYY-MM-DD format before calling tools.
@@ -607,12 +756,15 @@ def main():
     print("  • Analyze spending patterns")
     print("  • View financial summaries")
     print("  • Get stock quotes")
+    print("  • Visualize portfolio performance over time")
     print("\nJust chat naturally! Examples:")
     print("  - I invested $1000 in Apple at $150 per share")
     print("  - How much am I worth?")
     print("  - Show me my portfolio")
     print("  - Add an expense of $45 for groceries")
     print("  - What's my spending breakdown?")
+    print("  - Plot my portfolio performance")
+    print("  - Show me a chart of my JPM investment over time")
     print("\nType 'quit' or 'exit' to stop.\n")
     
     # Create the agent
