@@ -1,6 +1,6 @@
 # Personal Finance AI Agent
 
-An intelligent finance assistant powered by Claude that understands natural language and tracks both expenses and investments with live stock prices.
+An intelligent finance assistant powered by Claude that understands natural language and tracks both expenses and investments with live stock prices, technical analysis, and risk assessment.
 
 ## Features
 
@@ -11,14 +11,32 @@ An intelligent finance assistant powered by Claude that understands natural lang
 - Financial summaries
 
 ### 📈 Investment Portfolio
-- **Track stock investments** with purchase price and date
+- Track stock investments with purchase price and date
 - **Automatic historical price lookup** - specify a date and get the actual price from that day
-- **Live portfolio valuation** using real-time stock prices
-- **Calculate gains/losses** since purchase
-- **Net worth calculation** including cash and investments
-- **📊 Visualize performance** - Two chart types:
-  - **Dollar charts**: See absolute portfolio value over time
-  - **Percentage charts**: Compare relative returns across investments
+- Live portfolio valuation using real-time stock prices
+- Calculate gains/losses since purchase
+- Net worth calculation including cash and investments
+
+### 📊 Portfolio Visualization
+Two powerful chart types to understand your investments:
+- **Dollar charts**: See absolute portfolio value over time
+- **Percentage charts**: Compare relative returns across investments (better for comparing performance!)
+
+### 📉 Technical Analysis
+Get professional trading signals for any stock:
+- **Moving Averages** (50-day & 200-day) - Detect Golden Cross and Death Cross patterns
+- **RSI (Relative Strength Index)** - Identify overbought/oversold conditions
+- **MACD** - Track momentum and trend changes
+- **Volume Analysis** - Confirm signal strength
+- **Clear buy/sell/hold recommendations** based on multiple indicators
+
+### 🎲 Monte Carlo Risk Analysis
+Understand your investment risk with probability-based analysis:
+- **Probability of profit/loss** - Know your odds before investing
+- **Value at Risk (VaR)** - See worst-case scenarios with 95%/99% confidence
+- **Expected outcomes** - Median and mean projections
+- **Upside potential** - Best-case scenarios
+- **Beautiful visualizations** - Histogram and cumulative distribution charts
 
 ### 🤖 AI-Powered
 - Natural language interface
@@ -29,28 +47,23 @@ An intelligent finance assistant powered by Claude that understands natural lang
 ## Setup
 
 ### 1. Create Environment
-
 ```bash
 conda create -n finance-agent python=3.10
 conda activate finance-agent
 ```
 
 ### 2. Install Dependencies
-
 ```bash
 pip install -r requirements.txt
 ```
 
 ### 3. Configure API Key
-
 ```bash
 cp .env.example .env
 ```
-
 Edit `.env` and add your Anthropic API key.
 
 ### 4. Run
-
 ```bash
 python finance_agent.py
 ```
@@ -59,43 +72,24 @@ python finance_agent.py
 
 ### Investment Tracking
 
+**Add investment with historical price:**
 ```
 You: I invested $1000 in Apple stock on January 16, 2024
 
-Agent: [Fetches historical price for January 16, 2024 and uses add_investment tool]
-✓ Investment added successfully!
+Agent: ✓ Investment added successfully!
 Symbol: AAPL
 Quantity: 5.41 shares
 Purchase Price: $184.86 per share (historical price from Jan 16, 2024)
 Total Cost: $1,000.00
+```
 
-You: On 16 of January, I bought $500 worth of Nike actions
-
-Agent: [Fetches historical Nike price for January 16 and calculates quantity]
-✓ Investment added successfully!
-Symbol: NKE
-Quantity: 4.87 shares
-Purchase Price: $102.61 per share
-Total Cost: $500.00
-Note: Using price from 2024-01-16 (closest trading day)
-
-You: I invested $1000 in Apple stock, I bought at $150 per share
-
-Agent: [Calculates quantity and uses add_investment tool]
-✓ Investment added successfully!
-Symbol: AAPL
-Quantity: 6.67 shares
-Purchase Price: $150.00 per share
-Total Cost: $1,000.00
-
+**Check your net worth:**
+```
 You: How much am I worth?
 
-Agent: [Uses get_net_worth tool with live prices]
-Net Worth Summary:
+Agent: Net Worth Summary:
 
 Cash Balance: $5,250.00
-  (Income - Expenses from transactions)
-
 Investment Portfolio: $1,215.50
   Total Invested: $1,000.00
   Gain: $215.50 (+21.55%)
@@ -103,136 +97,186 @@ Investment Portfolio: $1,215.50
 ========================================
 TOTAL NET WORTH: $6,465.50
 ========================================
-
-You: Show me my portfolio
-
-Agent: [Uses get_portfolio_value tool]
-Investment Portfolio:
-
-AAPL:
-  Quantity: 6.67 shares
-  Avg Purchase Price: $150.00
-  Current Price: $182.45
-  Total Cost: $1,000.00
-  Current Value: $1,215.50
-  Gain: $215.50 (+21.55%) ✓
-
-Portfolio Summary:
-Total Invested: $1,000.00
-Current Value: $1,215.50
-Total Gain: $215.50 (+21.55%) ✓
 ```
 
-### Expense Tracking
+### Technical Analysis
 
 ```
-You: Add a $45 expense for groceries
+You: Should I buy Tesla?
 
-Agent: [Uses add_transaction tool]
-✓ Transaction added successfully!
+Agent: 
+═══════════════════════════════════════════════════════════
+Technical Analysis: Tesla, Inc. (TSLA)
+═══════════════════════════════════════════════════════════
 
-You: What's my spending breakdown?
+📊 Current Status:
+   Price: $238.76
+   Volume: High interest (1.3x average)
 
-Agent: [Uses analyze_spending tool]
-Spending by Category:
-Food: $450.00 (35.0%) - 12 transactions
-Housing: $1,200.00 (50.0%) - 1 transaction
-...
+📈 Moving Averages:
+   50-day SMA:  $235.42
+   200-day SMA: $218.15
+   Signal: 🟢 Bullish Trend
+
+💪 RSI: 58.32
+   Signal: ⚪ Neutral
+
+⚡ MACD:
+   Signal: 🟢 MACD Above Signal - Bullish
+
+🎯 OVERALL RECOMMENDATION: 🟢 BUY
+   Positive signals, good entry point
 ```
 
-### Stock Quotes
+### Monte Carlo Risk Analysis
 
 ```
-You: What's Tesla's stock price?
+You: Analyze the risk of investing $1000 in Apple for 30 days
 
-Agent: [Uses get_stock_quote tool]
-Stock Quote: Tesla, Inc. (TSLA)
-Current Price: $238.76
-Change: +$5.23 (+2.24%)
-...
+Agent:
+═══════════════════════════════════════════════════════════
+Monte Carlo Risk Analysis: Apple Inc. (AAPL)
+═══════════════════════════════════════════════════════════
+
+📊 Investment Details:
+   Investment Amount: $1,000.00
+   Time Horizon: 30 days
+   Simulations: 10,000
+
+🎯 Expected Outcomes:
+   Median Value: $1,015.32 (+1.53%)
+   
+   50% chance above $1,015.32
+   50% chance below $1,015.32
+
+📊 Probability Distribution:
+   Probability of Profit: 56.3%
+   Probability of Loss: 43.7%
+   
+   Probability of 20%+ Gain: 8.2%
+   Probability of 20%+ Loss: 6.1%
+
+⚠️  Value at Risk (VaR):
+   95% VaR: $872.45 (-12.76%)
+   └─ 95% confident you won't lose more than $127.55
+   
+   99% VaR: $815.20 (-18.48%)
+   └─ 99% confident you won't lose more than $184.80
+
+📈 Upside Potential:
+   75th Percentile: $1,098.50 (+9.85%)
+   95th Percentile: $1,245.80 (+24.58%)
+
+💡 Interpretation:
+   🟡 Moderate probability of profit (56.3%)
+   Slightly positive outlook, but significant uncertainty
+   
+   Risk Level: 🟡 Moderate (Daily volatility: 1.85%)
+
+✓ Risk analysis chart created: risk_analysis_AAPL.png
 ```
 
 ### Portfolio Visualization
 
-#### Dollar Value Chart
-```
-You: Plot my portfolio performance
-
-Agent: [Uses plot_portfolio_performance tool]
-✓ Portfolio performance chart created: portfolio_performance.png
-
-Summary:
-
-JPM:
-  Purchase Date: 2026-01-11
-  Total Cost: $1,000.00
-  Current Value: $1,045.23
-  Gain: $45.23 (+4.52%) ✓
-
-[Chart shows line graph of portfolio dollar value from purchase date to now]
-```
-
-#### Percentage Returns Chart
+**Percentage returns chart:**
 ```
 You: Show me percentage returns for all my investments
 
-Agent: [Uses plot_portfolio_performance_percent tool]
-✓ Portfolio percentage performance chart created: portfolio_performance_percent.png
+Agent: 
+✓ Portfolio percentage performance chart created!
 
 Summary (Current Performance vs. Purchase Price):
 
-JPM:
-  Avg Purchase Price: $245.10
-  Current Price: $256.35
-  Performance: +4.59% ✓
-
-AAPL:
-  Avg Purchase Price: $195.50
-  Current Price: $215.20
-  Performance: +10.08% ✓
+JPM: +4.59% ✓
+AAPL: +10.08% ✓
 
 💡 Tip: The 0% line shows break-even. Above = profit, below = loss.
-
-[Chart shows percentage gains/losses - easy to compare relative performance!]
 ```
-
-**Two views, complete picture:**
-- **Dollar chart**: Shows absolute wealth and portfolio value
-- **Percentage chart**: Shows relative performance and investment skill
 
 ## How It Works
 
-### Investment Tracking
-1. When you add an investment, it records:
-   - Stock symbol
-   - Number of shares
-   - Purchase price per share (fetched automatically based on date)
-   - Purchase date
-   - Total cost
+### Technical Analysis
 
-2. **Historical Price Fetching**:
-   - If you specify a purchase date (e.g., "on January 16"), the agent fetches the actual stock price from that date
-   - Uses yfinance historical data to get the closing price on the specified date
-   - If the date falls on a weekend/holiday, it uses the closest prior trading day
-   - If no date is specified, uses the current market price
+Uses proven technical indicators:
 
-3. When you ask about your worth:
-   - Fetches current stock prices via yfinance
-   - Calculates current value = shares × current price
-   - Shows gain/loss = current value - purchase cost
-   - Combines with cash balance for total net worth
+1. **Moving Averages (SMA50 & SMA200)**
+   - Detects Golden Cross (bullish) and Death Cross (bearish) patterns
+   - Shows current trend direction
 
-### Data Storage
+2. **RSI (Relative Strength Index)**
+   - Identifies overbought (>70) and oversold (<30) conditions
+   - Spots potential reversal points
+
+3. **MACD**
+   - Generates buy signals on bullish crossovers
+   - Generates sell signals on bearish crossovers
+
+4. **Volume Analysis**
+   - Confirms strength of price movements
+
+### Monte Carlo Risk Analysis
+
+Uses **Geometric Brownian Motion** to simulate 10,000 possible price paths:
+
+1. Fetches 1 year of historical data
+2. Calculates daily returns and volatility
+3. Runs 10,000 simulations of possible futures
+4. Analyzes results for probabilities, VaR, percentiles
+5. Creates distribution charts
+
+**Better than price predictions** - shows you the range of possible outcomes instead of pretending to know the exact future price.
+
+## Data Storage
+
 - `transactions.csv` - All income/expense transactions
 - `investments.csv` - Stock purchase records
 - Both persist between sessions
 
-## Architecture
+## Available Tools
 
-Uses Claude's native tool calling with langchain-core 1.2.7:
-- `@tool` decorator for clean tool definitions
-- `bind_tools()` to give Claude access to tools
-- Claude decides which tools to use based on your query
-- Live stock prices via yfinance API
-- Beautiful visualizations with seaborn and matplotlib
+### Portfolio Management
+- `add_investment` - Record stock purchases
+- `get_portfolio_value` - View current holdings
+- `get_net_worth` - Calculate total net worth
+- `plot_portfolio_performance` - Dollar value chart
+- `plot_portfolio_performance_percent` - Percentage returns chart
+
+### Market Analysis
+- `get_stock_quote` - Get current stock price
+- `get_trading_signals` - Technical analysis with buy/sell recommendations
+- `analyze_risk` - Monte Carlo risk analysis with probability distributions
+
+### Transaction Tracking
+- `add_transaction` - Record income/expenses
+- `view_transactions` - See transaction history
+- `analyze_spending` - Spending breakdown
+
+## Requirements
+
+Key dependencies:
+- `anthropic>=0.39.0` - Claude API
+- `langchain-anthropic>=0.3.0` - LangChain integration
+- `yfinance>=0.2.40` - Stock price data
+- `pandas>=2.0.0` - Data manipulation
+- `matplotlib>=3.7.0` - Charting
+- `seaborn>=0.13.0` - Visualizations
+- `numpy>=1.24.0` - Monte Carlo simulations
+
+## Tips
+
+### Example Workflow
+
+```
+1. "Should I buy Tesla?" 
+   → Get trading signals
+
+2. "Analyze the risk of investing $5000 in Tesla for 30 days"
+   → See probability distribution
+
+3. If both look good, buy it
+   → "I invested $5000 in Tesla at $238 per share"
+
+4. Track performance
+   → "Show me percentage returns for all investments"
+```
 
