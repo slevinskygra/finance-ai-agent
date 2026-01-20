@@ -1039,6 +1039,288 @@ Technical Analysis: {company_name} ({symbol})
         return f"Error analyzing {symbol}: {str(e)}\n\nDetails:\n{error_details}"
 
 
+
+@tool
+def analyze_risk(symbol: str, investment_amount: float = 1000, days: int = 30, simulations: int = 10000) -> str:
+    """
+    Perform Monte Carlo risk analysis to show probability distribution of investment outcomes.
+    
+    Instead of predicting exact prices (which is unreliable), this shows you the RANGE
+    of possible outcomes and their probabilities. Much more useful for risk management!
+    
+    Uses historical volatility to simulate thousands of possible price paths, giving you:
+    - Probability of profit vs loss
+    - Expected value (median outcome)
+    - Value at Risk (VaR) - worst case scenarios
+    - Best/worst case ranges
+    - Visual distribution chart
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., "AAPL", "JPM", "TSLA")
+        investment_amount: How much you're investing in dollars (default: $1000)
+        days: Time horizon in days (default: 30, max: 365)
+        simulations: Number of Monte Carlo simulations (default: 10000)
+    
+    Returns:
+        Risk analysis with probability distributions and visualizations
+    """
+    try:
+        symbol = symbol.upper().strip()
+        
+        # Validate inputs
+        if investment_amount <= 0:
+            return "Error: Investment amount must be positive"
+        if days < 1:
+            return "Error: Days must be at least 1"
+        if days > 365:
+            days = 365
+            print("Note: Limiting to 365 days")
+        if simulations < 1000:
+            simulations = 1000
+        if simulations > 50000:
+            simulations = 50000
+        
+        # Fetch historical data
+        import yfinance as yf
+        import numpy as np
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from datetime import datetime, timedelta
+        import pandas as pd
+        
+        stock = yf.Ticker(symbol)
+        hist = stock.history(period="1y")  # 1 year for volatility calculation
+        
+        if hist.empty or len(hist) < 30:
+            return f"Error: Insufficient historical data for {symbol}"
+        
+        # Get current info
+        info = stock.info
+        company_name = info.get('longName', symbol)
+        current_price = hist['Close'].iloc[-1]
+        
+        # Calculate historical statistics
+        returns = hist['Close'].pct_change().dropna()
+        daily_volatility = returns.std()
+        daily_return = returns.mean()
+        
+        print(f"\n[Monte Carlo Simulation for {symbol}]")
+        print(f"Running {simulations:,} simulations over {days} days...")
+        
+        # Calculate shares you'd buy
+        shares = investment_amount / current_price
+        
+        # Monte Carlo simulation
+        # Use Geometric Brownian Motion (standard for stock prices)
+        np.random.seed(42)  # For reproducibility
+        
+        # Generate random returns for each simulation
+        # Each simulation is a possible price path
+        simulation_results = np.zeros(simulations)
+        
+        for i in range(simulations):
+            # Generate random daily returns based on historical volatility
+            random_returns = np.random.normal(daily_return, daily_volatility, days)
+            
+            # Calculate final price after compounding returns
+            price_path = current_price * np.exp(np.cumsum(random_returns))
+            final_price = price_path[-1]
+            
+            # Calculate final portfolio value
+            simulation_results[i] = shares * final_price
+        
+        # Calculate statistics
+        median_value = np.percentile(simulation_results, 50)
+        mean_value = np.mean(simulation_results)
+        
+        # Value at Risk (VaR) - probability of losses
+        var_95 = np.percentile(simulation_results, 5)   # 95% confident won't lose more than this
+        var_99 = np.percentile(simulation_results, 1)   # 99% confident won't lose more than this
+        
+        # Upside potential
+        percentile_75 = np.percentile(simulation_results, 75)
+        percentile_95 = np.percentile(simulation_results, 95)
+        best_case = np.max(simulation_results)
+        worst_case = np.min(simulation_results)
+        
+        # Probability analysis
+        prob_profit = (simulation_results > investment_amount).sum() / simulations * 100
+        prob_loss = (simulation_results < investment_amount).sum() / simulations * 100
+        prob_big_loss = (simulation_results < investment_amount * 0.8).sum() / simulations * 100
+        prob_big_gain = (simulation_results > investment_amount * 1.2).sum() / simulations * 100
+        
+        # Returns
+        median_return = ((median_value - investment_amount) / investment_amount) * 100
+        mean_return = ((mean_value - investment_amount) / investment_amount) * 100
+        
+        print(f"✓ Simulation complete!")
+        
+        # Create visualization
+        try:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+            
+            # Left plot: Histogram of outcomes
+            ax1.hist(simulation_results, bins=100, alpha=0.7, color='steelblue', edgecolor='black')
+            ax1.axvline(investment_amount, color='green', linestyle='--', linewidth=2, label=f'Initial Investment (${investment_amount:,.0f})')
+            ax1.axvline(median_value, color='red', linestyle='--', linewidth=2, label=f'Median Outcome (${median_value:,.0f})')
+            ax1.axvline(var_95, color='orange', linestyle=':', linewidth=2, label=f'95% VaR (${var_95:,.0f})')
+            
+            ax1.set_xlabel('Portfolio Value ($)', fontsize=12, fontweight='bold')
+            ax1.set_ylabel('Frequency', fontsize=12, fontweight='bold')
+            ax1.set_title(f'{company_name} ({symbol}) - {days}-Day Monte Carlo Simulation\n{simulations:,} Simulations',
+                         fontsize=14, fontweight='bold')
+            ax1.legend(loc='best')
+            ax1.grid(True, alpha=0.3)
+            
+            # Right plot: Cumulative probability
+            sorted_results = np.sort(simulation_results)
+            cumulative_prob = np.arange(1, len(sorted_results) + 1) / len(sorted_results) * 100
+            
+            ax2.plot(sorted_results, cumulative_prob, linewidth=2, color='steelblue')
+            ax2.axvline(investment_amount, color='green', linestyle='--', linewidth=2, label='Break Even')
+            ax2.axhline(50, color='gray', linestyle=':', alpha=0.5)
+            ax2.axvline(median_value, color='red', linestyle='--', linewidth=2, alpha=0.7)
+            
+            ax2.set_xlabel('Portfolio Value ($)', fontsize=12, fontweight='bold')
+            ax2.set_ylabel('Cumulative Probability (%)', fontsize=12, fontweight='bold')
+            ax2.set_title('Cumulative Distribution Function', fontsize=14, fontweight='bold')
+            ax2.legend(loc='best')
+            ax2.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            
+            # Save
+            output_file = f"risk_analysis_{symbol}.png"
+            plt.savefig(output_file, dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            chart_created = True
+            
+        except Exception as e:
+            print(f"Warning: Could not create chart: {e}")
+            chart_created = False
+            output_file = None
+        
+        # Build result
+        result = f"""
+═══════════════════════════════════════════════════════════
+Monte Carlo Risk Analysis: {company_name} ({symbol})
+═══════════════════════════════════════════════════════════
+
+📊 Investment Details:
+   Investment Amount: ${investment_amount:,.2f}
+   Current Price: ${current_price:.2f}
+   Shares: {shares:.4f}
+   Time Horizon: {days} days
+   Simulations: {simulations:,}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 Historical Statistics:
+   Daily Return: {daily_return * 100:.3f}%
+   Daily Volatility: {daily_volatility * 100:.2f}%
+   Annualized Volatility: {daily_volatility * np.sqrt(252) * 100:.1f}%
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 Expected Outcomes:
+
+   Median Value: ${median_value:,.2f} ({median_return:+.2f}%)
+   Mean Value: ${mean_value:,.2f} ({mean_return:+.2f}%)
+   
+   50% chance your portfolio will be worth more than ${median_value:,.2f}
+   50% chance your portfolio will be worth less than ${median_value:,.2f}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 Probability Distribution:
+
+   Probability of Profit: {prob_profit:.1f}%
+   Probability of Loss: {prob_loss:.1f}%
+   
+   Probability of 20%+ Gain: {prob_big_gain:.1f}%
+   Probability of 20%+ Loss: {prob_big_loss:.1f}%
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  Value at Risk (VaR):
+
+   95% VaR: ${var_95:,.2f} ({((var_95 - investment_amount) / investment_amount * 100):+.2f}%)
+   └─ 95% confident you won't lose more than ${investment_amount - var_95:,.2f}
+   
+   99% VaR: ${var_99:,.2f} ({((var_99 - investment_amount) / investment_amount * 100):+.2f}%)
+   └─ 99% confident you won't lose more than ${investment_amount - var_99:,.2f}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 Upside Potential:
+
+   75th Percentile: ${percentile_75:,.2f} ({((percentile_75 - investment_amount) / investment_amount * 100):+.2f}%)
+   95th Percentile: ${percentile_95:,.2f} ({((percentile_95 - investment_amount) / investment_amount * 100):+.2f}%)
+   
+   Best Case (0.01%): ${best_case:,.2f} ({((best_case - investment_amount) / investment_amount * 100):+.2f}%)
+   Worst Case (0.01%): ${worst_case:,.2f} ({((worst_case - investment_amount) / investment_amount * 100):+.2f}%)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 Interpretation:
+"""
+        
+        # Add interpretation
+        if prob_profit > 70:
+            result += "\n   🟢 High probability of profit ({:.1f}%)".format(prob_profit)
+            result += "\n   Strong positive outlook based on historical patterns"
+        elif prob_profit > 55:
+            result += "\n   🟡 Moderate probability of profit ({:.1f}%)".format(prob_profit)
+            result += "\n   Slightly positive outlook, but significant uncertainty"
+        elif prob_profit < 45:
+            result += "\n   🔴 Higher probability of loss ({:.1f}%)".format(prob_loss)
+            result += "\n   Negative outlook based on historical patterns"
+        else:
+            result += "\n   ⚪ Roughly 50/50 odds"
+            result += "\n   High uncertainty - could go either way"
+        
+        result += f"\n\n   Risk Level: "
+        if daily_volatility < 0.015:
+            result += "🟢 Low (Daily volatility: {:.2f}%)".format(daily_volatility * 100)
+        elif daily_volatility < 0.025:
+            result += "🟡 Moderate (Daily volatility: {:.2f}%)".format(daily_volatility * 100)
+        else:
+            result += "🔴 High (Daily volatility: {:.2f}%)".format(daily_volatility * 100)
+        
+        result += "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        
+        if chart_created:
+            result += f"\n✓ Risk analysis chart created: {output_file}\n"
+        
+        result += """
+📚 How to Use This Analysis:
+
+• Median Value: Your most likely outcome (50/50 chance)
+• VaR: Maximum likely loss at given confidence level
+• Probability of Profit: Odds of making money
+• Distribution: Shows full range of possible outcomes
+
+⚠️  Important Notes:
+
+• Based on HISTORICAL volatility (past ≠ future)
+• Assumes normal distribution (real markets have fat tails)
+• Doesn't account for black swan events
+• Use as ONE input for decision-making
+• Consider your risk tolerance and time horizon
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+        
+        return result
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return f"Error performing risk analysis for {symbol}: {str(e)}\n\nDetails:\n{error_details}"
+
 def create_finance_agent():
     """Create the AI agent with tool calling."""
     
@@ -1064,7 +1346,8 @@ def create_finance_agent():
         delete_investment,
         plot_portfolio_performance,
         plot_portfolio_performance_percent,
-        get_trading_signals
+        get_trading_signals,
+        analyze_risk
     ]
     
     llm_with_tools = llm.bind_tools(tools)
@@ -1082,6 +1365,7 @@ When a user asks about their data:
 - Use plot_portfolio_performance to create charts showing dollar value over time
 - Use plot_portfolio_performance_percent to create charts showing percentage gains/losses (better for comparing investments)
 - Use get_trading_signals to analyze stocks with technical indicators (moving averages, RSI, MACD) and provide buy/sell recommendations
+- Use analyze_risk to perform Monte Carlo simulation showing probability distributions and risk analysis (VaR, expected outcomes, upside/downside scenarios)
 
 DATE HANDLING:
 When the user mentions dates in natural language (like "on the 12 of january", "january 12th", "12/1/2026"), you MUST convert them to YYYY-MM-DD format before calling tools.
@@ -1134,6 +1418,7 @@ def main():
     print("  • Get stock quotes")
     print("  • Visualize portfolio performance over time")
     print("  • Get buy/sell trading signals with technical analysis")
+    print("  • Analyze investment risk with Monte Carlo simulations")
     print("\nJust chat naturally! Examples:")
     print("  - I invested $1000 in Apple at $150 per share")
     print("  - How much am I worth?")
@@ -1143,7 +1428,8 @@ def main():
     print("  - Plot my portfolio performance")
     print("  - Show me percentage gains for all investments")
     print("  - Should I buy Tesla? (gets trading signals)")
-    print("  - Analyze JPM and give me trading recommendations")
+    print("  - Analyze the risk of investing $5000 in Apple")
+    print("  - What are the odds of making money on JPM in 30 days?")
     print("\nType 'quit' or 'exit' to stop.\n")
     
     # Create the agent
